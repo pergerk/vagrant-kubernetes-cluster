@@ -95,9 +95,43 @@
   - name: Copy the join command to server location
     copy: src=join-command dest=/tmp/join-command.sh mode=0777
 
+  - name: Docker config 
+    copy:
+      dest: /etc/docker/daemon.json
+      content: >- 
+        {
+          "exec-opts": ["native.cgroupdriver=systemd"],
+          "log-driver": "json-file",
+          "log-opts": {
+            "max-size": "100m"
+          },
+          "storage-driver": "overlay2",
+          "storage-opts": [
+            "overlay2.override_kernel_check=true"
+          ]
+        }
+
+  - name: Create directories
+    file: 
+      state: directory
+      path: /etc/systemd/system/docker.service.d
+
+  - name:
+    systemd: 
+      daemon_reload: yes
+    notify:
+      - docker restart
+
+  # - name: View file
+  #   debug: var=item
+  #   with_file:
+  #     - /etc/docker/daemon.json
+
   - name: Join the node to cluster
     command: sh /tmp/join-command.sh
 
   handlers:
   - name: docker status
     service: name=docker state=started
+  - name: docker restart
+    service: name=docker state=restarted

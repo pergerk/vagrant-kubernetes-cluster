@@ -78,6 +78,33 @@
         - kubeadm 
         - kubectl
 
+  - name: Docker config 
+    copy:
+      dest: /etc/docker/daemon.json
+      content: >- 
+        {
+          "exec-opts": ["native.cgroupdriver=systemd"],
+          "log-driver": "json-file",
+          "log-opts": {
+            "max-size": "100m"
+          },
+          "storage-driver": "overlay2",
+          "storage-opts": [
+            "overlay2.override_kernel_check=true"
+          ]
+        }
+
+  - name: Create directories
+    file: 
+      state: directory
+      path: /etc/systemd/system/docker.service.d
+
+  - name:
+    systemd: 
+      daemon_reload: yes
+    notify:
+      - docker restart
+
   - name: Configure node ip
     lineinfile:
       path: /etc/default/kubelet
@@ -89,9 +116,11 @@
       name: kubelet
       daemon_reload: yes
       state: restarted
-      
+  - name: Copy the join command to server location
+    copy: src=kubeadm-config.yml dest=./kubeadm-config.yml mode=0777
+
   - name: Initialize the Kubernetes cluster using kubeadm
-    command: kubeadm init --apiserver-advertise-address="192.168.50.10" --apiserver-cert-extra-sans="192.168.50.10"  --node-name k8s-master --pod-network-cidr=192.168.0.0/16
+    command: kubeadm init --apiserver-advertise-address="192.168.50.10" --apiserver-cert-extra-sans="192.168.50.10"  --node-name k8s-master --pod-network-cidr=10.1.0.0/16
     
   - name: Setup kubeconfig for vagrant user
     command: "{{ item }}"
@@ -100,10 +129,14 @@
      - cp -i /etc/kubernetes/admin.conf /home/vagrant/.kube/config
      - chown vagrant:vagrant /home/vagrant/.kube/config
 
-  # - name: Install calico pod network
-  #   become: false
-  #   command: kubectl create -f https://docs.projectcalico.org/v3.4/getting-started/kubernetes/installation/hosted/calico.yaml
-    
+  - name: Install flannel pod network
+    become: false
+    command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+#  - name: Install calico pod network
+#    become: false
+#    command: kubectl create -f https://docs.projectcalico.org/v3.4/getting-started/kubernetes/installation/hosted/calico.yaml
+
   - name: Generate join command
     command: kubeadm token create --print-join-command
     register: join_command
@@ -115,6 +148,12 @@
      content: "{{ join_command.stdout_lines[0] }}" 
      dest: "./join-command"
 
+  - name: Add dashboard
+    become: false
+    command: kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+
   handlers:
   - name: docker status
     service: name=docker state=started
+  - name: docker restart
+    service: name=docker state=restarted
