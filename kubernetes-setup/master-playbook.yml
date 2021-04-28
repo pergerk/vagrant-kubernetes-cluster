@@ -65,7 +65,7 @@
     apt_repository:
       repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
       state: present
-      filename: kubernetes.list
+      filename: kubernetes
 
   - name: Install Kubernetes binaries
     apt: 
@@ -99,7 +99,7 @@
       state: directory
       path: /etc/systemd/system/docker.service.d
 
-  - name:
+  - name: Reload docker
     systemd: 
       daemon_reload: yes
     notify:
@@ -116,8 +116,6 @@
       name: kubelet
       daemon_reload: yes
       state: restarted
-  - name: Copy the join command to server location
-    copy: src=kubeadm-config.yml dest=./kubeadm-config.yml mode=0777
 
   - name: Initialize the Kubernetes cluster using kubeadm
     command: kubeadm init --apiserver-advertise-address="192.168.50.10" --apiserver-cert-extra-sans="192.168.50.10"  --node-name k8s-master --pod-network-cidr=10.1.0.0/16
@@ -151,6 +149,19 @@
   - name: Add dashboard
     become: false
     command: kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+
+  - name: Get config command
+    become: false
+    command: cat "~/.kube/config"
+    register: kube_config
+
+  - name: Copy config command to local file
+    delegate_to: localhost
+    become: false
+    copy:
+      content: "{{ kube_config.stdout_lines | join('\n') }}" 
+      dest: "./.kube-config"
+
 
   handlers:
   - name: docker status
