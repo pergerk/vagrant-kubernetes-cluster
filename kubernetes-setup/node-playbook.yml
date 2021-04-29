@@ -129,6 +129,12 @@
 
   - name: Join the node to cluster
     command: sh /tmp/join-command.sh
+  
+  - name: Replace config
+    replace:
+      path: /var/lib/kubelet/config.yaml
+      regexp: '^cgroupDriver:.*$'
+      replace: "cgroupDriver: systemd"
 
   handlers:
   - name: docker status
